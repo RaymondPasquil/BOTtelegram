@@ -1,0 +1,142 @@
+import axios from "axios";
+import moment from "moment-timezone";
+
+// 发送计划的频道
+const channelUsername = "@gameresult";
+
+const gameResults = [];
+let previousResults = null;
+
+// 获取印度时间
+const getIndiaTime = async () => {
+  try {
+    const response = await axios.get('http://worldtimeapi.org/api/timezone/Asia/Kolkata');
+    return response.data.datetime; // 返回印度时间
+  } catch (error) {
+    console.error('获取印度时间时出错:', error);
+    return moment().tz("Asia/Kolkata").format(); // 作为备用，使用本地时间
+  }
+};
+
+// 获取游戏结果
+const getGameResults = async () => {
+  const url = "https://lottstars.com/result/getResult";
+  const currentDate = await getIndiaTime(); // 获取当前印度时间
+
+  try {
+    const response = await axios.get(url, {
+      params: {
+        game: "vngo1",
+        date: currentDate.split("T")[0], 
+        page: 1,
+        limit: 10,
+      },
+    });
+    if (gameResults.length > 0) {
+      // 更新预测结果
+      await updateForecastResults(response.data.data.list[0]);
+    }
+    return response.data;
+  } catch (error) {
+    console.error("获取游戏结果时出错:", error);
+    return { data: { list: [] } };
+  }
+};
+
+// 自动推送功能
+const sendResults_vngo1 = async (bot) => {
+  let results = await getGameResults();
+
+  if (
+    (previousResults &&
+      JSON.stringify(results) === JSON.stringify(previousResults)) ||
+    results.length < 0
+  ) {
+    console.log("结果与上次相同，返回");
+    return;
+  }
+
+  previousResults = results;
+
+  if (results.data.list.length === 0) {
+    console.log("没有获取到游戏结果");
+    return;
+  }
+
+  const latestResult = results.data.list[0];
+  const latestPeriod = latestResult.period;
+  const nextPrediction = predictNextResult(latestPeriod);
+
+  if (!gameResults.some((result) => result.period === nextPrediction.period)) {
+    gameResults.unshift(nextPrediction);
+    if (gameResults.length > 10) {
+      gameResults.pop();
+    }
+  }
+  const message = formatMessage(gameResults);
+  bot.sendMessage(channelUsername, message, { parse_mode: "HTML" });
+};
+
+// 随机预测下一期的数据
+const predictNextResult = (currentPeriod) => {
+  const options = ["Red", "Green", "Purple", "Big", "Small"];
+  const bs = options[Math.floor(Math.random() * options.length)];
+  return {
+    period: String(parseInt(currentPeriod) + 1),
+    bs: bs,
+    predictOutcome: "",
+  };
+};
+
+// 更新预测结果
+const updateForecastResults = async (data) => {
+  try {
+    if (!gameResults.length) {
+      console.error("gameResults 数组为空");
+      return;
+    }
+
+    if (data.period === gameResults[0].period) {
+      const openNum = data.open_num[0];
+      let result = "LOSE";
+
+      if (gameResults[0].bs === "Red" && [0, 2, 4, 6, 8].includes(openNum)) {
+        result = openNum === 0 ? "WIN " : "WIN";
+      } else if (
+        gameResults[0].bs === "Green" &&
+        [1, 3, 5, 7, 9].includes(openNum)
+      ) {
+        result = openNum === 5 ? "WIN " : "WIN";
+      } else if (gameResults[0].bs === "Purple" && [0, 5].includes(openNum)) {
+        result = "WIN";
+      } else if (gameResults[0].bs === "Big" && openNum >= 5) {
+        result = "WIN";
+      } else if (gameResults[0].bs === "Small" && openNum <= 4) {
+        result = "WIN";
+      }
+
+      gameResults[0].predictOutcome = result;
+    } else {
+      return;
+    }
+  } catch (error) {
+    console.error("更新出错:", error);
+  }
+};
+
+// 格式化消息
+const formatMessage = (results) => {
+  let message = "============\nWinGo 1Min - TC\n============\n";
+  results
+    .slice()
+    .reverse()
+    .forEach((result) => {
+      const outcome = result.predictOutcome ? ` ${result.predictOutcome}` : "";
+      const period = result.period.slice(-3);
+      message += `${period} 1 MIN【${result.bs.toUpperCase()}】${outcome}\n`;
+    });
+  message += `============\n\nAdmin assist ：https://t.me/TCofficial_Priyanka\n\nIf You have any inquiries or issues \nTC Customer Support link: \n======================\nhttps://tcsupport.in/#/\n======================\n⚠️Claim your Win streak Bonus ⚠️\n💯DOUBLE Bonus ( 1 AM - 7 AM Daily ) 💯\n======================\nOfficial TC website link :\ntcgames.app\n`;
+  return message;
+};
+
+export { sendResults_vngo1 };

@@ -1,0 +1,17 @@
+{
+  "name": "expbot",
+  "version": "1.0.0",
+  "main": "expbot",
+  "scripts": {
+    "start": "node expbot.js"
+  },
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.3",
+    "moment-timezone": "^0.5.45",
+    "node-schedule": "^2.1.1",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
